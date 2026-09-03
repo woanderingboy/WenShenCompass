@@ -28,6 +28,11 @@
         <div class="import-row"><label class="file-button">导入 TXT 文件<input id="txtFile" type="file" accept=".txt,text/plain"></label><span id="fileStatus">支持 UTF-8 文本，单文件最大20MB；长篇会逐章分析</span></div>
         <label class="chapter-option"><input id="chapterMode" type="checkbox" checked><span><b>启用长篇分章审核</b><small>识别“第X章”等标题；没有标题时按长度自动分段，生成章节风险热区。</small></span></label>
         <label class="chapter-option"><input id="recommendationMode" type="checkbox" checked><span><b>启用真人推荐价值审核</b><small>检查作者声音、场景质感、写作手法、记忆资产、悬念断档与读者跳读风险。</small></span></label>
+        <label class="range-option"><span>目标字数区间</span><select id="lengthTarget">
+          <option value="1500-3000">短章 1500–3000 字</option>
+          <option value="2000-4000" selected>常规 2000–4000 字</option>
+          <option value="3000-6000">长篇 3000–6000 字</option>
+        </select></label>
         <fieldset><legend>审稿模式</legend><div class="review-modes">
           <label><input type="radio" name="reviewMode" value="rules"><span><b>快速规则检测</b><small>速度快，定位确定性风险</small></span></label>
           <label><input type="radio" name="reviewMode" value="humanlike" checked><span><b>模拟真人审稿</b><small>三名独立角色交叉审核</small></span></label>

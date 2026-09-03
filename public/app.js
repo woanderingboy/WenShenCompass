@@ -8,8 +8,10 @@ const levelName = { critical: '致命风险', high: '高风险', medium: '中风
 
 // 单章目标字数区间与档位边界。前端无构建步骤，无法直接复用 src/lengthGuard.js，
 // 因此这里镜像一份常量，改动时请与 lengthGuard.js 的 LENGTH_TARGET / FAR_SHORT_CEILING / LONG_CEILING 同步。
-const LENGTH_TARGET_MIN = 2000;
-const LENGTH_TARGET_MAX = 4000;
+// 预设档只改区间端点（1500–3000 / 2000–4000 / 3000–6000），1000（far-short 上界）与
+// 6000（long 上界）两个锚定沿用 lengthGuard 的 FAR_SHORT_CEILING / LONG_CEILING，不随档位变化。
+const LENGTH_PRESETS = [{ min: 1500, max: 3000 }, { min: 2000, max: 4000 }, { min: 3000, max: 6000 }];
+let selectedTarget = { min: 2000, max: 4000 };
 const LENGTH_FAR_SHORT_CEILING = 1000;
 const LENGTH_LONG_CEILING = 6000;
 const lengthStatusName = { empty: '未输入', 'far-short': '严重偏短', short: '偏短', ok: '达标', long: '偏长', 'far-long': '严重偏长' };
@@ -22,23 +24,30 @@ const lengthStatusName = { empty: '未输入', 'far-short': '严重偏短', shor
 function classifyChars(chars) {
   if (chars <= 0) return { status: 'empty', label: lengthStatusName.empty };
   if (chars < LENGTH_FAR_SHORT_CEILING) return { status: 'far-short', label: lengthStatusName['far-short'] };
-  if (chars < LENGTH_TARGET_MIN) return { status: 'short', label: lengthStatusName.short };
-  if (chars <= LENGTH_TARGET_MAX) return { status: 'ok', label: lengthStatusName.ok };
+  if (chars < selectedTarget.min) return { status: 'short', label: lengthStatusName.short };
+  if (chars <= selectedTarget.max) return { status: 'ok', label: lengthStatusName.ok };
   if (chars <= LENGTH_LONG_CEILING) return { status: 'long', label: lengthStatusName.long };
   return { status: 'far-long', label: lengthStatusName['far-long'] };
 }
 
-/** 刷新正文输入框右上角的实时字数与相对 2000–4000 目标区间的篇幅状态。 */
+/** 刷新正文输入框右上角的实时字数与相对目标区间的篇幅状态。 */
 function renderWordCount() {
   const counter = document.querySelector('#wordCount');
   const chars = text.value.replace(/\s/g, '').length;
   if (!chars) { counter.textContent = '0 字'; counter.className = 'length-counter'; return; }
   const { status, label } = classifyChars(chars);
-  counter.textContent = `${chars} 字 · ${label}（目标 ${LENGTH_TARGET_MIN}–${LENGTH_TARGET_MAX}）`;
+  counter.textContent = `${chars} 字 · ${label}（目标 ${selectedTarget.min}–${selectedTarget.max}）`;
   counter.className = `length-counter ${status === 'ok' ? 'is-ok' : 'is-warn'}`;
 }
 
 text.addEventListener('input', renderWordCount);
+
+// 目标字数区间选择：解析 "2000-4000" → {min:2000,max:4000}，更新 selectedTarget 并刷新实时计数器。
+document.querySelector('#lengthTarget').addEventListener('change', e => {
+  const [min, max] = e.target.value.split('-').map(Number);
+  selectedTarget = { min, max };
+  renderWordCount();
+});
 document.querySelector('#txtFile').addEventListener('change', async e => {
   const file = e.target.files[0];
   if (!file) return;
@@ -72,7 +81,7 @@ form.addEventListener('submit', async e => {
     const reviewMode = document.querySelector('[name=reviewMode]:checked').value;
     const chapterMode = document.querySelector('#chapterMode').checked;
     const recommendationMode = document.querySelector('#recommendationMode').checked;
-    const response = await fetch('/api/analyze', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: document.querySelector('#title').value, genre: document.querySelector('#genre').value, provenance: document.querySelector('#provenance').value, intro: document.querySelector('#intro').value, text: text.value, platforms, reviewMode, chapterMode, recommendationMode }) });
+    const response = await fetch('/api/analyze', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: document.querySelector('#title').value, genre: document.querySelector('#genre').value, provenance: document.querySelector('#provenance').value, intro: document.querySelector('#intro').value, text: text.value, platforms, reviewMode, chapterMode, recommendationMode, lengthTarget: selectedTarget }) });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error);
     lastReport = data; renderReport(data);

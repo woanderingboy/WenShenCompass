@@ -51,7 +51,7 @@ function scanOnly(input) {
   const intro = String(input.intro || '').trim();
   const body = String(input.text || '').trim();
   const complete = `${title}\n${intro}\n${body}`;
-  const commercialQuality = analyzeCommercialQuality({ title, intro, text: body, chapterAnalysis: Boolean(input.chapterAnalysis) });
+  const commercialQuality = analyzeCommercialQuality({ title, intro, text: body, chapterAnalysis: Boolean(input.chapterAnalysis), lengthTarget: input.lengthTarget });
   const issues = [
     ...scan(complete),
     ...commercialQuality.findings.map(x => ({ ...x, origin: 'commercialQuality', match: x.evidence, excerpt: x.evidence }))
@@ -68,7 +68,7 @@ function analyzeChapters(input, options = {}) {
   const maxChapters = Math.max(1, Number(options.maxChapters) || 2000);
   const analyzed = chapters.slice(0, maxChapters).map(chapter => {
     // 逐章使用轻量 scanOnly：显式关闭逐章推荐评审，不重复计算全平台区间。
-    const scanned = scanOnly({ chapterAnalysis: true, title: chapter.title, intro: '', text: chapter.content });
+    const scanned = scanOnly({ chapterAnalysis: true, title: chapter.title, intro: '', text: chapter.content, lengthTarget: input.lengthTarget });
     const aiStyle = analyzeAIWriting(chapter.content);
     const policyIssues = scanned.issues.filter(issue => issue.origin !== 'commercialQuality' && !['quality', 'metadata'].includes(issue.category));
     const qualityIssues = scanned.issues.filter(issue => issue.origin === 'commercialQuality' || ['quality', 'metadata'].includes(issue.category));
@@ -78,7 +78,7 @@ function analyzeChapters(input, options = {}) {
     return {
       index: chapter.index, title: chapter.title, chars: chapter.chars, source: chapter.source,
       // 本章篇幅档位（目标区间 2000–4000 字），供风险地图与汇总统计复用。
-      lengthCheck: classifyLength(chapter.chars),
+      lengthCheck: classifyLength(chapter.chars, input.lengthTarget),
       riskScore, qualityRiskScore, qualityScore: scanned.commercialQuality.score, qualityReadiness: scanned.commercialQuality.readiness, combinedRiskScore, aiScore: aiStyle.score, aiBand: aiStyle.band, aiConfidence: aiStyle.confidence,
       verdict: riskScore >= 40 ? '高风险' : riskScore >= 15 ? '建议修改' : riskScore > 0 ? '轻微风险' : '暂未发现明显合规风险',
       counts: scanned.counts,

@@ -1,5 +1,5 @@
 const { clamp, mean, std, CHAPTER_HEADING } = require('./util');
-const { classifyLength, lengthPointsOf, LENGTH_TARGET, MULTI_CHAPTER_MIN, LENGTH_GUARD_MIN_CHARS } = require('./lengthGuard');
+const { classifyLength, lengthPointsOf, MULTI_CHAPTER_MIN, LENGTH_GUARD_MIN_CHARS } = require('./lengthGuard');
 
 function chaptersOf(text) {
   const source = String(text || '').replace(/\r\n?/g, '\n');
@@ -22,9 +22,9 @@ function addFinding(findings, finding) { findings.push({ category: 'quality', le
  * @returns {{prefix: string} & ReturnType<typeof classifyLength>} 判定单元与档位结论
  */
 function lengthUnitOf(ctx) {
-  if (ctx.input.chapterAnalysis) return { prefix: '本章', ...classifyLength(ctx.chars) };
-  if (ctx.chapters.length >= MULTI_CHAPTER_MIN) return { prefix: '平均单章', ...classifyLength(ctx.averageChapterChars) };
-  return { prefix: '全文', ...classifyLength(ctx.chars) };
+  if (ctx.input.chapterAnalysis) return { prefix: '本章', ...classifyLength(ctx.chars, ctx.input.lengthTarget) };
+  if (ctx.chapters.length >= MULTI_CHAPTER_MIN) return { prefix: '平均单章', ...classifyLength(ctx.averageChapterChars, ctx.input.lengthTarget) };
+  return { prefix: '全文', ...classifyLength(ctx.chars, ctx.input.lengthTarget) };
 }
 
 function analyzeCommercialQuality(input) {
@@ -94,7 +94,7 @@ function analyzeCommercialQuality(input) {
         level: ctx.lengthUnit.level,
         label: `篇幅${ctx.lengthUnit.label}`,
         points: lengthPointsOf(ctx.lengthUnit.status),
-        evidence: `${ctx.lengthUnit.prefix} ${ctx.lengthUnit.chars} 字（目标 ${LENGTH_TARGET.min}–${LENGTH_TARGET.max}）`,
+        evidence: `${ctx.lengthUnit.prefix} ${ctx.lengthUnit.chars} 字（目标 ${ctx.lengthUnit.target.min}–${ctx.lengthUnit.target.max}）`,
         reason: ctx.lengthUnit.reason,
         advice: ctx.lengthUnit.advice
       })

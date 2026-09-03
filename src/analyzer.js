@@ -106,7 +106,7 @@ function analyzeNovel(input) {
   // 分层关系：顶层 issues 是「规则层」（含 safety/ai/quality 等命中），commercialQuality.findings 是「成熟度层」。
   // 两层对同一段文本的成熟度结论会重叠（例如「章节展开不足」既作为 findings 出现，也以 quality 类 issue 呈现）——这是设计内的，
   // 前端应分别渲染，不要按 id 去重合并，否则会把两份结论误当成一条。
-  const commercialQuality = analyzeCommercialQuality({ title, intro, text: body, chapterAnalysis: Boolean(input.chapterAnalysis) });
+  const commercialQuality = analyzeCommercialQuality({ title, intro, text: body, chapterAnalysis: Boolean(input.chapterAnalysis), lengthTarget: input.lengthTarget });
   const recommendation = input.recommendationMode === false ? null : recommendationReview({ title, intro, text: body, genre: input.genre });
   const issues = [...scan(complete), ...commercialQuality.findings.map(x => ({ ...x, origin: 'commercialQuality', match: x.evidence, excerpt: x.evidence }))].sort((a, b) => LEVEL_WEIGHT[b.level] - LEVEL_WEIGHT[a.level]);
   const selected = Array.isArray(input.platforms) && input.platforms.length ? input.platforms : Object.keys(PLATFORM_PROFILES);
@@ -141,7 +141,7 @@ function analyzeNovel(input) {
   // 篇幅检测：多章（≥2章）以平均单章字数判定并附逐章明细，否则以正文字符数判定。
   // 章节切分复用 commercialQuality 的 chaptersOf，与 metrics.chapters 口径一致；
   // 此处不能 require chapterAnalyzer（它反向依赖本文件，会形成循环依赖）。
-  const lengthCheck = buildLengthReport(chaptersOf(body), commercialQuality.metrics.totalChars);
+  const lengthCheck = buildLengthReport(chaptersOf(body), commercialQuality.metrics.totalChars, input.lengthTarget);
   return {
     meta: { title: title || '未命名作品', genre: input.genre || '未选择', words: complete.replace(/\s/g, '').length, analyzedAt: new Date().toISOString(), model: '分层规则模拟 v0.2' },
     summary: { counts, issueCount: issues.length, headline: clean ? '暂未发现明显规则风险' : `发现 ${issues.length} 类待处理问题`, disclaimer: '合规预审与投稿成熟度已分开展示；区间是未校准的投稿准备度估计，不是平台官方通过率，也不代表签约、推荐或变现结论。' },

@@ -49,3 +49,19 @@ test('商业质量问题不被误算为合规违规', () => {
   assert.ok(result.issues.some(x => x.origin === 'commercialQuality'));
 });
 
+test('analyzeNovel 透传 lengthTarget，单章篇幅判定随区间变化', () => {
+  const text2500 = '字'.repeat(2500);
+  const text5000 = '字'.repeat(5000);
+
+  const custom = analyzeNovel({ title: '测试', intro: '', text: text2500, lengthTarget: { min: 3000, max: 6000 } });
+  assert.deepEqual(custom.lengthCheck.target, { min: 3000, max: 6000 }, 'lengthCheck.target 反映自定义区间');
+  assert.equal(custom.lengthCheck.status, 'short', '2500<3000 判偏短');
+
+  const custom5000 = analyzeNovel({ title: '测试', intro: '', text: text5000, lengthTarget: { min: 3000, max: 6000 } });
+  assert.equal(custom5000.lengthCheck.status, 'ok', '5000 落在 3000–6000 内判达标');
+
+  const defaulted = analyzeNovel({ title: '测试', intro: '', text: text2500 });
+  assert.deepEqual(defaulted.lengthCheck.target, { min: 2000, max: 4000 }, '未传 lengthTarget 回退默认区间');
+  assert.equal(defaulted.lengthCheck.status, 'ok', '默认 2000–4000 下 2500 判达标');
+});
+

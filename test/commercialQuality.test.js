@@ -33,3 +33,17 @@ test('无规则风险与内容成熟度保持分层', () => {
   assert.ok(report.issues.some(x => x.category === 'quality'));
   assert.match(report.summary.disclaimer, /合规预审与投稿成熟度已分开展示/);
 });
+
+test('analyzeCommercialQuality 透传 lengthTarget，篇幅越界判定随区间变化', () => {
+  const text = '字'.repeat(2500);
+
+  const inRange = analyzeCommercialQuality({ title: '测试', intro: '', text, chapterAnalysis: true, lengthTarget: { min: 1500, max: 3000 } });
+  assert.equal(inRange.findings.filter(x => x.id === 'chapter-length-out-of-range').length, 0, '2500 在 1500–3000 内，不触发越界扣分');
+
+  const outOfRange = analyzeCommercialQuality({ title: '测试', intro: '', text, chapterAnalysis: true, lengthTarget: { min: 3000, max: 6000 } });
+  const oor = outOfRange.findings.filter(x => x.id === 'chapter-length-out-of-range');
+  assert.equal(oor.length, 1, '2500<3000 触发越界扣分');
+  assert.equal(oor[0].level, 'low', 'short 档 level=low');
+  assert.match(oor[0].evidence, /3000/);
+  assert.match(oor[0].evidence, /6000/);
+});

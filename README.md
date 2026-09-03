@@ -33,7 +33,7 @@
 npm start          # 等价于 node server.js，默认端口 4173
 # 浏览器打开 http://localhost:4173
 
-npm test           # 运行 node --test，当前 60+ 个用例全部通过
+npm test           # 运行 node --test，当前 79 个用例全部通过
 PORT=8080 npm start # 自定义端口
 ```
 
@@ -49,7 +49,7 @@ wenshen-compass/
 ├── server.js               # HTTP 服务：静态资源 + /api/analyze + /api/ai-detection(+status) + /api/platforms
 ├── public/                 # 前端（纯静态，无构建）
 │   ├── index.html          # 表单与报告页骨架
-│   ├── app.js              # 表单提交、TXT 导入、报告渲染（fetch /api/analyze）；LENGTH_TARGET_MIN 等为 lengthGuard 镜像常量（改档位须同步）
+│   ├── app.js              # 表单提交、TXT 导入、报告渲染（fetch /api/analyze）；LENGTH_PRESETS / LENGTH_FAR_SHORT_CEILING / LENGTH_LONG_CEILING 为 lengthGuard 镜像常量（改档位须同步）
 │   └── styles.css          # 样式
 ├── src/                    # 检测引擎（纯函数，可独立 require）
 │   ├── analyzer.js         # 主引擎：规则库 + 平台画像 + 合规扫描 + 投稿准备度区间 + 顶层 lengthCheck
@@ -62,7 +62,7 @@ wenshen-compass/
 │   ├── util.js             # 叶子工具模块：clamp / mean / std / redact / LEVEL_WEIGHT / CHAPTER_HEADING（不依赖其它 src 模块）
 │   ├── platforms.js        # 叶子模块：PLATFORM_PROFILES 平台主数据（不依赖其它 src 模块）
 │   └── lengthGuard.js      # 字数（篇幅）检测：LENGTH_BANDS / classifyLength / summarizeLength / buildLengthReport（仅依赖 util.js）
-├── test/                   # node --test 用例（9 个测试文件 + fixtures/，60+ 用例，随包分发，当前全绿）
+├── test/                   # node --test 用例（9 个测试文件 + fixtures/，79 用例，随包分发，当前全绿）
 │   ├── analyzer.test.js / aiStyleDetector.test.js / aiDetectorApi.test.js
 │   ├── chapterAnalyzer.test.js / commercialQuality.test.js / recommendationReview.test.js
 │   ├── aiReviewer.test.js / util.test.js / server.test.js
@@ -129,6 +129,7 @@ server.js
 | `chapterMode` | boolean | 是否逐章分析 |
 | `recommendationMode` | boolean | `false` 时关闭真人推荐审核 |
 | `reviewMode` | string | `rules`（仅规则）或 `humanlike`（加三角色审稿） |
+| `lengthTarget` | object | 目标字数区间 `{ min, max }`；缺省回退 `LENGTH_TARGET`（2000–4000）。可选档位：1500–3000 / 2000–4000 / 3000–6000。前端「目标字数区间」选择器输出此结构，决定篇幅判定、实时计数器、章节徽标与后端打分口径 |
 
 响应（节选）：`meta`、`summary`、`platforms[]`、`issues[]`、`categoryScores`、`commercialQuality`、`recommendationReview`、`aiStyleReport`、`chapterReport?`、`humanReview?`、`sources[]`。
 
@@ -227,20 +228,21 @@ npm start
     - `chapterAnalyzer.js` 每章挂 `lengthCheck`，汇总 `summary` 含 `chaptersInRange` / `chaptersOutOfRange`；
     - `commercialQuality.js` 的 `chapter-length-out-of-range` 检查项消费档位扣分；
     - 前端 `public/`：实时字数计数器、`app.js` 结果区「篇幅检测」卡片、章节字数徽标。
-    - 注意：`public/app.js` 中的 `LENGTH_TARGET_MIN` 等常量是本模块的**镜像**，改档位时 `src/lengthGuard.js` 与 `public/app.js` 必须同步（`app.js` 已有注释标注）。
+    - **目标区间可配置**：`lengthTarget` 字段贯穿 `analyzer → commercialQuality / chapterAnalyzer → lengthGuard.classifyLength`，前端三档预设（1500–3000 / 2000–4000 / 3000–6000）只改 `min/max` 端点；`1000`（far-short 上界）与 `6000`（long 上界）由 `FAR_SHORT_CEILING` / `LENGTH_LONG_CEILING` 固定，不随档位变化。
+    - 注意：`public/app.js` 中的 `LENGTH_PRESETS` / `selectedTarget` / `LENGTH_FAR_SHORT_CEILING` / `LENGTH_LONG_CEILING` 常量是本模块的**镜像**，改档位时 `src/lengthGuard.js` 与 `public/app.js` 必须同步（`app.js` 已有注释标注）。
 
 ---
 
 ## 8. 测试
 
 ```bash
-npm test      # node --test，test/ 下 9 个测试文件 + fixtures、60+ 个用例，随包分发，当前全绿
+npm test      # node --test，test/ 下 9 个测试文件 + fixtures、79 个用例，随包分发，当前全绿
 ```
 
 测试覆盖：规则命中与脱敏、平台画像、AI 风格信号、外部检测适配与融合/降级、章节切分（含 120+ 章长篇）、成熟度扣分、R0–R3 评级与「纯剧情概述不得高判」、三角色审稿汇总、字数（篇幅）档位与判定单元等。
 **新增检测逻辑时，请同步在 `test/` 增加用例**，保持 `npm test` 全绿。
 
-> 对齐说明：本节用例数（60+）、§3 目录结构与 §5 API 清单均已与当前代码核对一致（`node --test` 全绿）；`lengthGuard` 相关用例由 QA 并行补充，随包分发后总数以实际运行 `npm test` 为准。
+> 对齐说明：本节用例数（79）、§3 目录结构与 §5 API 清单均已与当前代码核对一致（`node --test` 全绿）；`lengthGuard` / `lengthTarget` 相关用例由 QA 并行补充，随包分发后总数以实际运行 `npm test` 为准。
 
 ---
 
@@ -249,7 +251,7 @@ npm test      # node --test，test/ 下 9 个测试文件 + fixtures、60+ 个�
 - **加一条合规规则**：在 `analyzer.js` 的 `RULES` 数组追加 `{ id, category, level, label, re, reason, advice }`。`category` 取 `safety|copyright|ai|metadata|quality`，`level` 取 `critical|high|medium|low`。正则用 `g` 标志；命中片段与计数自动生成。
 - **加一个平台画像**：在 `PLATFORM_PROFILES` 加 `{ name, base, strict:{safety,copyright,ai,metadata,quality}, note, evidence }`，前端平台多选与 `public/index.html` 同步加一个 checkbox。
 - **加一个成熟度/推荐信号**：分别在 `commercialQuality.js`（`findings` + 扣分）或 `recommendationReview.js`（`detectVoice/detectCraft/...`）追加；正向资产用 `positive: true`，并在测试里固化「不该误判」的反例。
-- **加一条字数档位**：在 `src/lengthGuard.js` 的 `LENGTH_BANDS` 数组按 `empty → far-short → short → ok → long → far-long` 的顺序追加（或修改）一项 `{ status, label, level, points, test, reason, advice, suggest }`；`test` 自上而下匹配，顺序即优先级。同时**必须同步**更新前端 `public/app.js` 中对应的镜像常量（如 `LENGTH_TARGET_MIN` / `LENGTH_TARGET_MAX` / 各档阈值），其顶部注释已标注「与 lengthGuard.js 保持一致」。新增判定逻辑时同步在 `test/` 补 `lengthGuard` 相关用例。
+- **加一条字数档位**：在 `src/lengthGuard.js` 的 `LENGTH_BANDS` 数组按 `empty → far-short → short → ok → long → far-long` 的顺序追加（或修改）一项 `{ status, label, level, points, test, reason, advice, suggest }`；`test` 自上而下匹配，顺序即优先级。同时**必须同步**更新前端 `public/app.js` 中对应的镜像常量（如 `LENGTH_PRESETS` / `LENGTH_FAR_SHORT_CEILING` / `LENGTH_LONG_CEILING` / 各档阈值），其顶部注释已标注「与 lengthGuard.js 保持一致」。新增判定逻辑时同步在 `test/` 补 `lengthGuard` 相关用例。
 - **接一个新的外部检测/模型供应商**：只需让其返回兼容 JSON（见第 6 节字段），或在 `aiDetectorApi.normalizeExternalResult` / `aiReviewer.callModel` 中增加字段映射；不要把令牌写进前端。
 - **改前端**：`public/` 为纯静态，报告渲染集中在 `public/app.js` 的 `renderReport / renderRecommendation / renderAIStyle / renderChapters / renderHumanReview`。新增后端字段后，在对应 render 函数消费即可。
 

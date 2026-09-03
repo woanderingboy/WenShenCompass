@@ -85,3 +85,17 @@ test('较长多章样稿逐章分析章节数正确且结构未变', () => {
   assert.ok(report.chapters.every(x => 'counts' in x));
   assert.ok(report.summary.averageQualityScore >= 0);
 });
+
+test('analyzeChapters 透传 lengthTarget，篇幅统计随区间变化', () => {
+  const text = '第一章 开篇\n' + '字'.repeat(2500) + '\n第二章 中段\n' + '字'.repeat(800) + '\n第三章 收尾\n' + '字'.repeat(3000);
+
+  const r1 = analyzeChapters({ text, lengthTarget: { min: 1500, max: 3000 } });
+  assert.deepEqual(r1.chapters[0].lengthCheck.target, { min: 1500, max: 3000 }, '每章 lengthCheck.target 反映对应区间');
+  assert.equal(r1.chapters[0].lengthCheck.status, 'ok', '2500 字章在 1500–3000 内达标');
+  assert.equal(r1.summary.chaptersInRange, 2, '1500–3000 下 2500 与 3000 两章达标');
+
+  const r2 = analyzeChapters({ text, lengthTarget: { min: 3000, max: 6000 } });
+  assert.deepEqual(r2.chapters[0].lengthCheck.target, { min: 3000, max: 6000 });
+  assert.equal(r2.chapters[0].lengthCheck.status, 'short', '同一 2500 字章在 3000–6000 下偏短');
+  assert.equal(r2.summary.chaptersInRange, 1, '3000–6000 下仅 3000 字章达标');
+});

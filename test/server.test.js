@@ -111,3 +111,18 @@ test('POST /api/analyze 文本非字符串返回 400', async () => {
     await new Promise(resolve => server.close(resolve));
   }
 });
+
+test('POST /api/analyze 透传 lengthTarget，响应 lengthCheck.target 反映自定义区间', async () => {
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address();
+  try {
+    const { status, body } = await post(port, '/api/analyze', {
+      title: '测试', intro: '简介', text: '林舟收到故乡来信，决定寻找父亲留下的手稿。'.repeat(30), lengthTarget: { min: 3000, max: 6000 }
+    });
+    assert.equal(status, 200);
+    const data = JSON.parse(body);
+    assert.deepEqual(data.lengthCheck.target, { min: 3000, max: 6000 }, '响应 body.lengthCheck.target 反映自定义区间（端到端印证）');
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});

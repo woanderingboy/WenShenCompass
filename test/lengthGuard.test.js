@@ -207,3 +207,33 @@ test('normalizeTarget 默认回退 LENGTH_TARGET，自定义 target 生效', () 
   assert.deepEqual(reversed.target, { min: 5000, max: 5000 }, 'min>max 时取 max(min,max)');
   assert.equal(reversed.status, 'short');
 });
+
+// ---------- 14. normalizeTarget 对 undefined 回退默认（链路兜底） ----------
+// 注意：normalizeTarget 未从模块导出，经 classifyLength 间接验证；确保上游漏传 lengthTarget 时
+// 篇幅判定回退默认 {2000,4000}，不随调用方漏传而漂移。
+test('normalizeTarget 对 undefined 回退默认 {2000,4000}（上游漏传时行为兜底）', () => {
+  assert.deepEqual(classifyLength(2500, undefined).target, { min: 2000, max: 4000 }, '显式 undefined 回退 LENGTH_TARGET');
+  assert.deepEqual(classifyLength(2500).target, { min: 2000, max: 4000 }, '缺省参数回退 LENGTH_TARGET');
+  assert.equal(classifyLength(2500, undefined).status, 'ok', '默认区间下 2500 判达标，不漂移');
+});
+
+// ---------- 14. 前端三档预设只改端点，1000/6000 锚定不随档位变化 ----------
+test('前端三档预设只改端点，far-short 上限1000 与 long 上限6000 锚定不变', () => {
+  const presets = [{ min: 1500, max: 3000 }, { min: 2000, max: 4000 }, { min: 3000, max: 6000 }];
+  // 5500 字：随端点在 偏长/达标 间切换，证明预设只改端点。
+  assert.equal(classifyLength(5500, presets[0]).status, 'long');
+  assert.equal(classifyLength(5500, presets[1]).status, 'long');
+  assert.equal(classifyLength(5500, presets[2]).status, 'ok');
+  for (const p of presets) assert.deepEqual(classifyLength(5500, p).target, p, `预设 ${p.min}-${p.max} 应原样进入 target`);
+
+  // 锚定：1000 永远是严重偏短上界，任何预设下都判偏短（不落入 far-short）。
+  for (const p of presets) assert.equal(classifyLength(1000, p).status, 'short', `预设 ${p.min}-${p.max}：1000 仍为偏短`);
+
+  // 锚定：long 上界由全局 LONG_CEILING=6000 决定，仅当 target.max<6000 时 6000 偏长。
+  assert.equal(classifyLength(6000, presets[0]).status, 'long');
+  assert.equal(classifyLength(6000, presets[1]).status, 'long');
+  assert.equal(classifyLength(6000, presets[2]).status, 'ok', 'target.max=6000 时 6000 为达标上界');
+
+  // 超出 6000 永远严重偏长，与预设无关。
+  for (const p of presets) assert.equal(classifyLength(6001, p).status, 'far-long');
+});
