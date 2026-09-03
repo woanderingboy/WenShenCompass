@@ -1,6 +1,7 @@
 const { scan } = require('./analyzer');
 const { analyzeAIWriting } = require('./aiStyleDetector');
 const { analyzeCommercialQuality } = require('./commercialQuality');
+const { classifyLength } = require('./lengthGuard');
 const { LEVEL_WEIGHT, CHAPTER_HEADING } = require('./util');
 
 function splitChapters(text, options = {}) {
@@ -76,6 +77,8 @@ function analyzeChapters(input, options = {}) {
     const combinedRiskScore = Math.round(Math.min(100, riskScore * .65 + qualityRiskScore * .45 + aiStyle.score * .55));
     return {
       index: chapter.index, title: chapter.title, chars: chapter.chars, source: chapter.source,
+      // 本章篇幅档位（目标区间 2000–4000 字），供风险地图与汇总统计复用。
+      lengthCheck: classifyLength(chapter.chars),
       riskScore, qualityRiskScore, qualityScore: scanned.commercialQuality.score, qualityReadiness: scanned.commercialQuality.readiness, combinedRiskScore, aiScore: aiStyle.score, aiBand: aiStyle.band, aiConfidence: aiStyle.confidence,
       verdict: riskScore >= 40 ? '高风险' : riskScore >= 15 ? '建议修改' : riskScore > 0 ? '轻微风险' : '暂未发现明显合规风险',
       counts: scanned.counts,
@@ -87,6 +90,8 @@ function analyzeChapters(input, options = {}) {
   const ranked = [...analyzed].sort((a, b) => b.combinedRiskScore - a.combinedRiskScore);
   const hotspots = ranked.filter(x => x.combinedRiskScore > 0).slice(0, 15);
   const totalChars = chapters.reduce((sum, x) => sum + x.chars, 0);
+  // 篇幅达标统计：status 为 ok 即落在 2000–4000 字目标区间内。
+  const chaptersInRange = analyzed.filter(x => x.lengthCheck.status === 'ok').length;
   return {
     mode: chapters.some(x => x.source === 'heading') ? '章节标题切分' : '按长度自动分段',
     totalChapters: chapters.length, analyzedChapters: analyzed.length, omittedChapters: Math.max(0, chapters.length - analyzed.length), totalChars,
@@ -99,6 +104,8 @@ function analyzeChapters(input, options = {}) {
       highAIChapters: analyzed.filter(x => x.aiScore >= 65).length,
       averageAIScore: analyzed.length ? Math.round(analyzed.reduce((sum, x) => sum + x.aiScore, 0) / analyzed.length) : 0,
       averageQualityScore: analyzed.length ? Math.round(analyzed.reduce((sum, x) => sum + x.qualityScore, 0) / analyzed.length) : 0,
+      chaptersInRange,
+      chaptersOutOfRange: analyzed.length - chaptersInRange,
       topChapter: hotspots[0]?.title || '无'
     }
   };

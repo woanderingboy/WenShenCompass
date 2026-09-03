@@ -35,7 +35,8 @@ const RULES = [
 
 const { LEVEL_WEIGHT } = require('./util');
 const CATEGORY_NAME = { safety: '内容安全', copyright: '版权原创', ai: 'AI文本质量', metadata: '标题与简介', quality: '叙事质量' };
-const { analyzeCommercialQuality } = require('./commercialQuality');
+const { analyzeCommercialQuality, chaptersOf } = require('./commercialQuality');
+const { buildLengthReport } = require('./lengthGuard');
 const { recommendationReview } = require('./recommendationReview');
 
 // 平台冷启动区间与评分计算中的具名常量（避免散落的魔法数字；仅供本文件使用）。
@@ -137,10 +138,14 @@ function analyzeNovel(input) {
     return [cat, Math.max(0, 100 - cost * 2)];
   }));
   const clean = issues.length === 0;
+  // 篇幅检测：多章（≥2章）以平均单章字数判定并附逐章明细，否则以正文字符数判定。
+  // 章节切分复用 commercialQuality 的 chaptersOf，与 metrics.chapters 口径一致；
+  // 此处不能 require chapterAnalyzer（它反向依赖本文件，会形成循环依赖）。
+  const lengthCheck = buildLengthReport(chaptersOf(body), commercialQuality.metrics.totalChars);
   return {
     meta: { title: title || '未命名作品', genre: input.genre || '未选择', words: complete.replace(/\s/g, '').length, analyzedAt: new Date().toISOString(), model: '分层规则模拟 v0.2' },
     summary: { counts, issueCount: issues.length, headline: clean ? '暂未发现明显规则风险' : `发现 ${issues.length} 类待处理问题`, disclaimer: '合规预审与投稿成熟度已分开展示；区间是未校准的投稿准备度估计，不是平台官方通过率，也不代表签约、推荐或变现结论。' },
-    platforms, issues, commercialQuality, recommendationReview: recommendation, categoryScores, categoryNames: CATEGORY_NAME, sources: PUBLIC_SOURCES
+    platforms, issues, commercialQuality, lengthCheck, recommendationReview: recommendation, categoryScores, categoryNames: CATEGORY_NAME, sources: PUBLIC_SOURCES
   };
 }
 

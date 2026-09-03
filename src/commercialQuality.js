@@ -1,4 +1,5 @@
 const { clamp, mean, std, CHAPTER_HEADING } = require('./util');
+const { classifyLength, lengthPointsOf, LENGTH_TARGET, MULTI_CHAPTER_MIN, LENGTH_GUARD_MIN_CHARS } = require('./lengthGuard');
 
 function chaptersOf(text) {
   const source = String(text || '').replace(/\r\n?/g, '\n');
@@ -12,6 +13,19 @@ function chaptersOf(text) {
 }
 
 function addFinding(findings, finding) { findings.push({ category: 'quality', level: 'low', count: 1, ...finding }); }
+
+/**
+ * 确定篇幅检测的「判定单元」：逐章分析看本章，多章全文看平均单章，单篇无章节标题看全文。
+ * 返回前缀用于在证据里标注判定口径，其余字段来自 classifyLength。
+ *
+ * @param {object} ctx 质量检查上下文
+ * @returns {{prefix: string} & ReturnType<typeof classifyLength>} 判定单元与档位结论
+ */
+function lengthUnitOf(ctx) {
+  if (ctx.input.chapterAnalysis) return { prefix: '本章', ...classifyLength(ctx.chars) };
+  if (ctx.chapters.length >= MULTI_CHAPTER_MIN) return { prefix: '平均单章', ...classifyLength(ctx.averageChapterChars) };
+  return { prefix: '全文', ...classifyLength(ctx.chars) };
+}
 
 function analyzeCommercialQuality(input) {
   const title = String(input.title || '').trim();
@@ -48,6 +62,8 @@ function analyzeCommercialQuality(input) {
     suspenseEndings, clueHits, lengthCv, deliveredClues, investigationActions,
     anonymousOpposition, oppositionIntent
   };
+  // 篇幅判定单元只算一次，供 QUALITY_CHECKS 中的 test 与 build 复用，避免重复计算。
+  qualityContext.lengthUnit = lengthUnitOf(qualityContext);
 
   const QUALITY_CHECKS = [
     {
@@ -67,6 +83,21 @@ function analyzeCommercialQuality(input) {
         const points = ctx.averageChapterChars < 550 ? 22 : 14;
         return { category: 'quality', level, label: '章节展开不足', points, evidence: `共${ctx.chapters.length}章，平均每章${Math.round(ctx.averageChapterChars)}字`, reason: '章节过短时，线索、冲突和人物选择容易停留在梗概层，不能仅凭无违规判定为成熟投稿稿件。', advice: '扩充关键行动的阻力、人物选择和后果，不要只增加环境描写或重复心理活动。' };
       }
+    },
+    {
+      // 单章目标区间 2000–4000 字；低于 LENGTH_GUARD_MIN_CHARS 的「过短」已由 chapter-underdeveloped
+      // 惩罚，这里设下限避免对同一处过短重复扣分，只负责区间两侧（偏短/偏长）的篇幅偏离。
+      id: 'chapter-length-out-of-range',
+      test: (ctx) => ctx.lengthUnit.status !== 'ok' && ctx.lengthUnit.chars >= LENGTH_GUARD_MIN_CHARS,
+      build: (ctx) => ({
+        category: 'quality',
+        level: ctx.lengthUnit.level,
+        label: `篇幅${ctx.lengthUnit.label}`,
+        points: lengthPointsOf(ctx.lengthUnit.status),
+        evidence: `${ctx.lengthUnit.prefix} ${ctx.lengthUnit.chars} 字（目标 ${LENGTH_TARGET.min}–${LENGTH_TARGET.max}）`,
+        reason: ctx.lengthUnit.reason,
+        advice: ctx.lengthUnit.advice
+      })
     },
     {
       id: 'sample-too-short',

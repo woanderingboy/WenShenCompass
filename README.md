@@ -12,7 +12,7 @@
 文审罗盘是一个 Node.js 原生实现（仅用内置模块 `node:http` / `node:fs`）的 Web 应用：
 
 - 前端：纯静态 HTML/CSS/JS（无框架、无构建步骤）。
-- 后端：单文件 HTTP 服务 `server.js`，提供静态资源与 3 个 JSON API。
+- 后端：单文件 HTTP 服务 `server.js`，提供静态资源与 4 个 JSON API。
 - 检测引擎：`src/` 下一组纯函数模块，**不依赖任何 npm 包**，可在 Node 中直接 `require` 复用，也可被测试单独调用。
 
 设计原则：
@@ -33,7 +33,7 @@
 npm start          # 等价于 node server.js，默认端口 4173
 # 浏览器打开 http://localhost:4173
 
-npm test           # 运行 node --test，当前 40 个用例全部通过
+npm test           # 运行 node --test，当前 60+ 个用例全部通过
 PORT=8080 npm start # 自定义端口
 ```
 
@@ -46,21 +46,27 @@ PORT=8080 npm start # 自定义端口
 ```
 wenshen-compass/
 ├── package.json            # name/scripts/engines，无 dependencies
-├── server.js               # HTTP 服务：静态资源 + /api/analyze + /api/ai-detection(+status)
+├── server.js               # HTTP 服务：静态资源 + /api/analyze + /api/ai-detection(+status) + /api/platforms
 ├── public/                 # 前端（纯静态，无构建）
 │   ├── index.html          # 表单与报告页骨架
-│   ├── app.js              # 表单提交、TXT 导入、报告渲染（fetch /api/analyze）
+│   ├── app.js              # 表单提交、TXT 导入、报告渲染（fetch /api/analyze）；LENGTH_TARGET_MIN 等为 lengthGuard 镜像常量（改档位须同步）
 │   └── styles.css          # 样式
 ├── src/                    # 检测引擎（纯函数，可独立 require）
-│   ├── analyzer.js         # 主引擎：规则库 + 平台画像 + 合规扫描 + 投稿准备度区间
+│   ├── analyzer.js         # 主引擎：规则库 + 平台画像 + 合规扫描 + 投稿准备度区间 + 顶层 lengthCheck
 │   ├── aiStyleDetector.js  # 本地可解释 AI 写作风格检测（短语/重复/节奏/多样性/分段热区）
 │   ├── aiDetectorApi.js    # 外部 AI 检测服务适配层（通用 JSON 协议）+ 本地/外部融合 + 降级
-│   ├── chapterAnalyzer.js  # 章节切分（标题正则 / 自动分段）与逐章风险评分、热区排序
-│   ├── commercialQuality.js# 内容成熟度：章节展开、互动密度、解释密度、线索便利度、阻力/兑现比…
+│   ├── chapterAnalyzer.js  # 章节切分（标题正则 / 自动分段）与逐章风险评分、热区排序；每章挂 lengthCheck
+│   ├── commercialQuality.js# 内容成熟度：章节展开、互动密度、解释密度、线索便利度、阻力/兑现比…（含 chapter-length-out-of-range）
 │   ├── recommendationReview.js # 真人阅读推荐审核：作者声音、手法覆盖、记忆资产、悬念断档、跳读、R0–R3
-│   └── aiReviewer.js       # 三角色模拟真人审稿（安全初审/责编/AI质量）+ 大模型适配 + 离线兜底
-├── test/                   # node --test 用例（7 个测试文件，对应 7 个 src 模块）
-│   └── fixtures/           # 测试夹具（如样章《白鹭归河》），随包分发，测试自包含
+│   ├── aiReviewer.js       # 三角色模拟真人审稿（安全初审/责编/AI质量）+ 大模型适配 + 离线兜底
+│   ├── util.js             # 叶子工具模块：clamp / mean / std / redact / LEVEL_WEIGHT / CHAPTER_HEADING（不依赖其它 src 模块）
+│   ├── platforms.js        # 叶子模块：PLATFORM_PROFILES 平台主数据（不依赖其它 src 模块）
+│   └── lengthGuard.js      # 字数（篇幅）检测：LENGTH_BANDS / classifyLength / summarizeLength / buildLengthReport（仅依赖 util.js）
+├── test/                   # node --test 用例（9 个测试文件 + fixtures/，60+ 用例，随包分发，当前全绿）
+│   ├── analyzer.test.js / aiStyleDetector.test.js / aiDetectorApi.test.js
+│   ├── chapterAnalyzer.test.js / commercialQuality.test.js / recommendationReview.test.js
+│   ├── aiReviewer.test.js / util.test.js / server.test.js
+│   └── fixtures/           # 测试夹具（样章《白鹭归河》），随包分发，测试自包含
 └── docs/
     ├── 检测机制与资料来源.md
     └── AI创作检测研究依据与边界.md
@@ -135,6 +141,16 @@ server.js
 
 返回外部检测服务配置状态（`configured` / `mode` / 各凭据是否就绪 / `maxChars`），不泄露令牌。
 
+### `GET /api/platforms`
+
+返回全部可选平台的主数据（不含严格系数等内部画像，仅暴露 id 与展示名），供前端动态生成平台多选：
+
+```json
+{ "platforms": [ { "id": "fanqie", "name": "番茄小说" }, { "id": "qidian", "name": "起点中文网" }, ... ] }
+```
+
+与 `/api/ai-detection/status` 一样属于无副作用的只读元信息接口；前端 `public/index.html` 的平台 checkbox 即来源于此，新增平台须同步在 `src/platforms.js` 的 `PLATFORM_PROFILES` 中登记。
+
 ---
 
 ## 6. 可选外部服务（环境变量）
@@ -187,16 +203,44 @@ npm start
 
 - **`aiReviewer.js`**：三个角色（内容安全初审员、平台责任编辑、AI 文本质量审核员）各自产出 verdict/findings/strengths/uncertainties，再由 `adjudicate()` 汇总多数意见、检测分歧与强制人工复核。无大模型时 `localFallback()` 用规则证据生成离线模拟意见。
 
+- **`lengthGuard.js`**：纯字数（篇幅）检测，对应单章规范 **2000–4000 字**（常量 `LENGTH_TARGET`）。本模块为依赖图叶子，只 `require('./util')`，绝不引用 analyzer / commercialQuality / chapterAnalyzer，避免循环依赖；全部导出为纯函数，便于单测。
+
+  - **判定单元抽象**：使用者既会贴单章也会贴多章全文，故按场景切换判定单元：
+    - 逐章分析（chapterMode）→ 单元是「本章」；
+    - 多章全文（章节数 ≥ `MULTI_CHAPTER_MIN`=2）→ 单元是「平均单章字数」；
+    - 单篇无标题 → 单元是「全文」。
+  - **档位表**（数组 `LENGTH_BANDS` 自上而下匹配，顺序即优先级；`level` 即商业质量扣分档，`points` 即扣分数）：
+
+    | 状态 status | 含义 | 字数条件 | level | 扣分 points |
+    | --- | --- | --- | --- | --- |
+    | `empty` | 未输入正文 | `= 0` | medium | 0 |
+    | `far-short` | 严重偏短 | `< 1000` | medium | 8 |
+    | `short` | 偏短 | `1000–1999` | low | 5 |
+    | `ok` | 达标 | `2000–4000` | ok | 0 |
+    | `long` | 偏长 | `4001–6000` | low | 5 |
+    | `far-long` | 严重偏长 | `> 6000` | medium | 8 |
+
+  - **900 字下限防重复扣分**：已有 `commercialQuality.js` 的 `chapter-underdeveloped`（`< 900` 字）罚「章节展开不足」，故本模块的 `chapter-length-out-of-range` 以 `LENGTH_GUARD_MIN_CHARS = 900` 为下限，仅对 ≥900 字但仍不在 2000–4000 区间者扣分，避免同一处「过短」被惩罚两次。
+  - **集成点**：
+    - `src/lengthGuard.js` 的 `buildLengthReport(chapters, bodyChars, target)` 生成整份篇幅结论；
+    - `analyzer.js` 顶层报告返回 `lengthCheck`；
+    - `chapterAnalyzer.js` 每章挂 `lengthCheck`，汇总 `summary` 含 `chaptersInRange` / `chaptersOutOfRange`；
+    - `commercialQuality.js` 的 `chapter-length-out-of-range` 检查项消费档位扣分；
+    - 前端 `public/`：实时字数计数器、`app.js` 结果区「篇幅检测」卡片、章节字数徽标。
+    - 注意：`public/app.js` 中的 `LENGTH_TARGET_MIN` 等常量是本模块的**镜像**，改档位时 `src/lengthGuard.js` 与 `public/app.js` 必须同步（`app.js` 已有注释标注）。
+
 ---
 
 ## 8. 测试
 
 ```bash
-npm test      # node --test，test/ 下 7 个文件、40 个用例
+npm test      # node --test，test/ 下 9 个测试文件 + fixtures、60+ 个用例，随包分发，当前全绿
 ```
 
-测试覆盖：规则命中与脱敏、平台画像、AI 风格信号、外部检测适配与融合/降级、章节切分（含 120+ 章长篇）、成熟度扣分、R0–R3 评级与「纯剧情概述不得高判」、三角色审稿汇总等。
+测试覆盖：规则命中与脱敏、平台画像、AI 风格信号、外部检测适配与融合/降级、章节切分（含 120+ 章长篇）、成熟度扣分、R0–R3 评级与「纯剧情概述不得高判」、三角色审稿汇总、字数（篇幅）档位与判定单元等。
 **新增检测逻辑时，请同步在 `test/` 增加用例**，保持 `npm test` 全绿。
+
+> 对齐说明：本节用例数（60+）、§3 目录结构与 §5 API 清单均已与当前代码核对一致（`node --test` 全绿）；`lengthGuard` 相关用例由 QA 并行补充，随包分发后总数以实际运行 `npm test` 为准。
 
 ---
 
@@ -205,6 +249,7 @@ npm test      # node --test，test/ 下 7 个文件、40 个用例
 - **加一条合规规则**：在 `analyzer.js` 的 `RULES` 数组追加 `{ id, category, level, label, re, reason, advice }`。`category` 取 `safety|copyright|ai|metadata|quality`，`level` 取 `critical|high|medium|low`。正则用 `g` 标志；命中片段与计数自动生成。
 - **加一个平台画像**：在 `PLATFORM_PROFILES` 加 `{ name, base, strict:{safety,copyright,ai,metadata,quality}, note, evidence }`，前端平台多选与 `public/index.html` 同步加一个 checkbox。
 - **加一个成熟度/推荐信号**：分别在 `commercialQuality.js`（`findings` + 扣分）或 `recommendationReview.js`（`detectVoice/detectCraft/...`）追加；正向资产用 `positive: true`，并在测试里固化「不该误判」的反例。
+- **加一条字数档位**：在 `src/lengthGuard.js` 的 `LENGTH_BANDS` 数组按 `empty → far-short → short → ok → long → far-long` 的顺序追加（或修改）一项 `{ status, label, level, points, test, reason, advice, suggest }`；`test` 自上而下匹配，顺序即优先级。同时**必须同步**更新前端 `public/app.js` 中对应的镜像常量（如 `LENGTH_TARGET_MIN` / `LENGTH_TARGET_MAX` / 各档阈值），其顶部注释已标注「与 lengthGuard.js 保持一致」。新增判定逻辑时同步在 `test/` 补 `lengthGuard` 相关用例。
 - **接一个新的外部检测/模型供应商**：只需让其返回兼容 JSON（见第 6 节字段），或在 `aiDetectorApi.normalizeExternalResult` / `aiReviewer.callModel` 中增加字段映射；不要把令牌写进前端。
 - **改前端**：`public/` 为纯静态，报告渲染集中在 `public/app.js` 的 `renderReport / renderRecommendation / renderAIStyle / renderChapters / renderHumanReview`。新增后端字段后，在对应 render 函数消费即可。
 

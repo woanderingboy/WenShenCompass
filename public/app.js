@@ -6,7 +6,39 @@ let lastReport = null;
 const escapeHtml = value => String(value).replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]));
 const levelName = { critical: '致命风险', high: '高风险', medium: '中风险', low: '低风险' };
 
-text.addEventListener('input', () => document.querySelector('#wordCount').textContent = `${text.value.replace(/\s/g, '').length} 字`);
+// 单章目标字数区间与档位边界。前端无构建步骤，无法直接复用 src/lengthGuard.js，
+// 因此这里镜像一份常量，改动时请与 lengthGuard.js 的 LENGTH_TARGET / FAR_SHORT_CEILING / LONG_CEILING 同步。
+const LENGTH_TARGET_MIN = 2000;
+const LENGTH_TARGET_MAX = 4000;
+const LENGTH_FAR_SHORT_CEILING = 1000;
+const LENGTH_LONG_CEILING = 6000;
+const lengthStatusName = { empty: '未输入', 'far-short': '严重偏短', short: '偏短', ok: '达标', long: '偏长', 'far-long': '严重偏长' };
+
+/**
+ * 与 src/lengthGuard.classifyLength 同口径的前端篇幅判定，用于输入时实时提示。
+ * @param {number} chars 已输入字符数（不含空白）
+ * @returns {{status: string, label: string}} 档位状态与中文名
+ */
+function classifyChars(chars) {
+  if (chars <= 0) return { status: 'empty', label: lengthStatusName.empty };
+  if (chars < LENGTH_FAR_SHORT_CEILING) return { status: 'far-short', label: lengthStatusName['far-short'] };
+  if (chars < LENGTH_TARGET_MIN) return { status: 'short', label: lengthStatusName.short };
+  if (chars <= LENGTH_TARGET_MAX) return { status: 'ok', label: lengthStatusName.ok };
+  if (chars <= LENGTH_LONG_CEILING) return { status: 'long', label: lengthStatusName.long };
+  return { status: 'far-long', label: lengthStatusName['far-long'] };
+}
+
+/** 刷新正文输入框右上角的实时字数与相对 2000–4000 目标区间的篇幅状态。 */
+function renderWordCount() {
+  const counter = document.querySelector('#wordCount');
+  const chars = text.value.replace(/\s/g, '').length;
+  if (!chars) { counter.textContent = '0 字'; counter.className = 'length-counter'; return; }
+  const { status, label } = classifyChars(chars);
+  counter.textContent = `${chars} 字 · ${label}（目标 ${LENGTH_TARGET_MIN}–${LENGTH_TARGET_MAX}）`;
+  counter.className = `length-counter ${status === 'ok' ? 'is-ok' : 'is-warn'}`;
+}
+
+text.addEventListener('input', renderWordCount);
 document.querySelector('#txtFile').addEventListener('change', async e => {
   const file = e.target.files[0];
   if (!file) return;
@@ -57,12 +89,37 @@ function renderReport(data) {
   document.querySelector('#platformResults').innerHTML = data.platforms.map(p => `<div class="platform-row"><div class="platform-name"><b>${escapeHtml(p.name)}</b><small>${escapeHtml(p.verdict)} · 成熟度${p.qualityScore}</small><small>${escapeHtml(p.complianceVerdict || '')}</small></div><div class="bar"><i style="width:${p.center}%"></i></div><div class="range">${p.low}%—${p.high}%<small>估计置信度：${p.confidence}</small></div><div class="platform-factors">${p.topFactors.map(x => `<small>${escapeHtml(x)}</small>`).join('')}<em>${escapeHtml(p.estimateBasis)}</em></div></div>`).join('');
   document.querySelector('#categoryScores').innerHTML = Object.entries(data.categoryScores).map(([id,score]) => `<div class="score-row"><header><span>${escapeHtml(data.categoryNames[id])}</span><b>${score}</b></header><div class="bar"><i style="width:${score}%"></i></div></div>`).join('');
   document.querySelector('#riskFilter').value = 'all'; renderIssues(data.issues, 'all');
+  renderLengthCheck(data.lengthCheck);
   renderRecommendation(data.recommendationReview);
   renderAIStyle(data.aiStyleReport);
   document.querySelector('#chapterFilter').value = 'all'; renderChapters(data.chapterReport, 'all');
   renderHumanReview(data.humanReview);
   document.querySelector('#sourceList').innerHTML = data.sources.map(source => `<a class="source-item" href="${escapeHtml(source.url)}" target="_blank" rel="noreferrer"><span class="source-level">${escapeHtml(source.level)}级</span><span><b>${escapeHtml(source.title)}</b><small>${escapeHtml(source.authority)} · ${escapeHtml(source.covers)}</small></span><i>↗</i></a>`).join('');
   document.querySelector('#disclaimer').textContent = `${data.summary.disclaimer} · ${data.meta.model} · 分析字数 ${data.meta.words}`;
+}
+
+/**
+ * 渲染顶层篇幅检测结论（目标区间 2000–4000 字）。
+ * 多章文本展示平均单章判定并列出逐章明细，单章/全文只展示整体判定。
+ * @param {{unit: string, chars: number, status: string, label: string, target: object,
+ *          deviation: number, reason: string, suggestion: string, totalChars: number,
+ *          inRangeChapters: number, outOfRangeChapters: number,
+ *          perChapter?: Array<{index: number, title: string, chars: number, status: string}>}} check 篇幅检测结论
+ * @returns {void}
+ */
+function renderLengthCheck(check) {
+  const section = document.querySelector('#lengthSection');
+  if (!section) return;
+  if (!check) { section.classList.add('hidden'); return; }
+  section.classList.remove('hidden');
+  const isOk = check.status === 'ok';
+  const tag = document.querySelector('#lengthTag');
+  tag.textContent = `${check.unit} · ${check.label}`;
+  tag.className = `tag length-tag ${isOk ? 'is-ok' : 'is-warn'}`;
+  const deviationText = check.deviation ? (check.chars < check.target.min ? `还差 ${check.deviation} 字` : `超出 ${check.deviation} 字`) : '已在目标区间内';
+  document.querySelector('#lengthOverview').innerHTML = `<div><small>${escapeHtml(check.unit)}字数</small><strong>${check.chars} 字</strong><p>目标 ${check.target.min}–${check.target.max} 字 · ${escapeHtml(deviationText)}</p></div><div class="length-meta"><span>全文合计 ${check.totalChars} 字</span><span>达标 ${check.inRangeChapters} 章/段</span><span>未达标 ${check.outOfRangeChapters} 章/段</span></div>`;
+  document.querySelector('#lengthAdvice').innerHTML = `<p><strong>判断依据：</strong>${escapeHtml(check.reason)}</p><p><strong>优化建议：</strong>${escapeHtml(check.suggestion)}</p>`;
+  document.querySelector('#lengthChapters').innerHTML = check.perChapter?.length ? check.perChapter.map(chapter => `<span class="length-pill ${chapter.status === 'ok' ? 'is-ok' : 'is-warn'}"><b>${escapeHtml(chapter.title)}</b><i>${chapter.chars}字 · ${escapeHtml(lengthStatusName[chapter.status] || chapter.status)}</i></span>`).join('') : '';
 }
 
 function renderRecommendation(report) {
@@ -98,6 +155,13 @@ function renderAIStyle(report) {
   document.querySelector('#aiLimits').textContent = report.limits;
 }
 
+/**
+ * 生成章节标题行的篇幅状态徽标。
+ * @param {{status: string}} [check] 该章的 lengthCheck，旧报告可能为 undefined
+ * @returns {string} 徽标 HTML，无数据时为空字符串
+ */
+const lengthBadge = check => check ? `<span class="length-badge ${check.status === 'ok' ? 'is-ok' : 'is-warn'}">${escapeHtml(lengthStatusName[check.status] || check.status)}</span>` : '';
+
 function renderChapters(report, filter = 'all') {
   const section = document.querySelector('#chapterSection');
   if (!report) { section.classList.add('hidden'); return; }
@@ -105,7 +169,7 @@ function renderChapters(report, filter = 'all') {
   document.querySelector('#chapterSummary').textContent = `${report.mode} · 共${report.totalChapters}章/段 · 已分析${report.analyzedChapters}章/段 · 覆盖率${report.coverage}%${report.omittedChapters ? ` · ${report.omittedChapters}章未分析` : ''}`;
   document.querySelector('#chapterHotspots').innerHTML = `<span>合规风险章节 ${report.summary.riskyChapters}</span><span>高合规风险 ${report.summary.highRiskChapters}</span><span>AI风格信号章节 ${report.summary.aiSignalChapters}</span><span>高AI风格风险 ${report.summary.highAIChapters}</span><span>平均AI风险分 ${report.summary.averageAIScore}</span><span>平均内容成熟度 ${report.summary.averageQualityScore}</span><span>最高综合风险：${escapeHtml(report.summary.topChapter)}</span>`;
   const chapters = filter === 'risk' ? report.chapters.filter(x => x.riskScore > 0 || x.aiScore >= 18) : filter === 'high' ? report.chapters.filter(x => x.riskScore >= 40 || x.aiScore >= 65) : report.chapters;
-  document.querySelector('#chapterList').innerHTML = chapters.length ? chapters.map(ch => `<details class="chapter-row" data-risk="${ch.combinedRiskScore}"><summary><span><b>${escapeHtml(ch.title)}</b><small>${ch.chars}字 · 合规${ch.riskScore}分 · 成熟度${ch.qualityScore}分 · AI风格${ch.aiScore}分（${escapeHtml(ch.aiConfidence)}置信度）</small></span><i style="width:${Math.min(100, ch.combinedRiskScore)}%"></i><strong>${ch.combinedRiskScore}</strong></summary>${ch.issues.length || ch.qualityIssues?.length || ch.aiSignals.length ? `<div class="chapter-issues">${ch.issues.map(x => `<article><em>${levelName[x.level]} · ${escapeHtml(x.label)}</em><q>${escapeHtml(x.excerpt)}</q><p>${escapeHtml(x.reason)}</p><small>优化：${escapeHtml(x.advice)}</small></article>`).join('')}${(ch.qualityIssues || []).map(x => `<article><em>内容成熟度 · ${escapeHtml(x.label)}</em><q>${escapeHtml(x.excerpt)}</q><p>${escapeHtml(x.reason)}</p><small>优化：${escapeHtml(x.advice)}</small></article>`).join('')}${ch.aiSignals.map(x => `<article class="ai-chapter-issue"><em>AI风格 · ${escapeHtml(x.label)}（+${x.points}）</em><q>${escapeHtml(x.evidence)}</q><p>${escapeHtml(x.explanation)}</p><small>优化：${escapeHtml(x.advice || '结合上下文进行人工改写。')}</small></article>`).join('')}</div>` : '<div class="review-clean">本章暂未发现明显合规、成熟度或AI风格风险</div>'}</details>`).join('') : '<div class="empty">该筛选范围内没有章节</div>';
+  document.querySelector('#chapterList').innerHTML = chapters.length ? chapters.map(ch => `<details class="chapter-row" data-risk="${ch.combinedRiskScore}"><summary><span><b>${escapeHtml(ch.title)}</b><small>${ch.chars}字${lengthBadge(ch.lengthCheck)} · 合规${ch.riskScore}分 · 成熟度${ch.qualityScore}分 · AI风格${ch.aiScore}分（${escapeHtml(ch.aiConfidence)}置信度）</small></span><i style="width:${Math.min(100, ch.combinedRiskScore)}%"></i><strong>${ch.combinedRiskScore}</strong></summary>${ch.issues.length || ch.qualityIssues?.length || ch.aiSignals.length ? `<div class="chapter-issues">${ch.issues.map(x => `<article><em>${levelName[x.level]} · ${escapeHtml(x.label)}</em><q>${escapeHtml(x.excerpt)}</q><p>${escapeHtml(x.reason)}</p><small>优化：${escapeHtml(x.advice)}</small></article>`).join('')}${(ch.qualityIssues || []).map(x => `<article><em>内容成熟度 · ${escapeHtml(x.label)}</em><q>${escapeHtml(x.excerpt)}</q><p>${escapeHtml(x.reason)}</p><small>优化：${escapeHtml(x.advice)}</small></article>`).join('')}${ch.aiSignals.map(x => `<article class="ai-chapter-issue"><em>AI风格 · ${escapeHtml(x.label)}（+${x.points}）</em><q>${escapeHtml(x.evidence)}</q><p>${escapeHtml(x.explanation)}</p><small>优化：${escapeHtml(x.advice || '结合上下文进行人工改写。')}</small></article>`).join('')}</div>` : '<div class="review-clean">本章暂未发现明显合规、成熟度或AI风格风险</div>'}</details>`).join('') : '<div class="empty">该筛选范围内没有章节</div>';
 }
 
 function renderHumanReview(review) {
@@ -143,3 +207,4 @@ function loadPlatforms() {
 }
 
 loadPlatforms();
+renderWordCount();
