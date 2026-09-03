@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>文审罗盘｜小说投稿前体检</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#"><span class="logo">文</span><span>文审罗盘<small>投稿之前，先做一次平台级体检</small></span></a>
+    <span class="local"><i></i> 本地分析 · 原稿不保存</span>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div><span class="eyebrow">小说发布审核模拟器</span><h1>提前发现风险，<em>更有把握地投稿</em></h1><p>针对不同网文平台，检查内容安全、原创风险、AI文本质量与平台适配度，并给出可执行的优化建议。</p></div>
+      <div class="hero-note"><strong>5</strong><span>个平台<br>差异化模拟</span></div>
+    </section>
+
+    <section class="workspace">
+      <form id="auditForm" class="editor card">
+        <div class="section-head"><div><span class="step">01</span><h2>创建检测</h2></div><button type="button" id="demoBtn" class="ghost">填入示例</button></div>
+        <div class="two-col"><label>作品名称<input id="title" placeholder="例如：山海来信" maxlength="80"></label><label>作品类型<select id="genre"><option>都市</option><option>玄幻</option><option>悬疑</option><option>现实</option><option>历史</option><option>言情</option><option>科幻</option></select></label></div>
+        <label>创作来源声明<select id="provenance"><option value="unknown">未声明/未知</option><option value="human">作者声明纯人工</option><option value="ai-assisted">作者声明AI辅助</option><option value="known-ai">已知主要由AI生成（评测样本）</option></select></label>
+        <label>作品简介<textarea id="intro" rows="3" placeholder="用一两句话概括人物、目标和核心冲突"></textarea></label>
+        <label class="text-label">正文内容 <span id="wordCount">0 字</span><textarea id="text" rows="16" placeholder="粘贴单章或前几章正文，建议不少于1000字……" required></textarea></label>
+        <div class="import-row"><label class="file-button">导入 TXT 文件<input id="txtFile" type="file" accept=".txt,text/plain"></label><span id="fileStatus">支持 UTF-8 文本，单文件最大20MB；长篇会逐章分析</span></div>
+        <label class="chapter-option"><input id="chapterMode" type="checkbox" checked><span><b>启用长篇分章审核</b><small>识别“第X章”等标题；没有标题时按长度自动分段，生成章节风险热区。</small></span></label>
+        <label class="chapter-option"><input id="recommendationMode" type="checkbox" checked><span><b>启用真人推荐价值审核</b><small>检查作者声音、场景质感、写作手法、记忆资产、悬念断档与读者跳读风险。</small></span></label>
+        <fieldset><legend>审稿模式</legend><div class="review-modes">
+          <label><input type="radio" name="reviewMode" value="rules"><span><b>快速规则检测</b><small>速度快，定位确定性风险</small></span></label>
+          <label><input type="radio" name="reviewMode" value="humanlike" checked><span><b>模拟真人审稿</b><small>三名独立角色交叉审核</small></span></label>
+        </div><p class="mode-hint">模拟真人审稿会先进行规则扫描，再由内容安全初审员、平台责任编辑和AI文本质量审核员独立判断；模型不可用时自动降级。</p></fieldset>
+        <fieldset><legend>目标平台（可多选）</legend><div class="platforms" id="platformList"></div></fieldset>
+        <div class="privacy"><span>🔒</span><p><strong>隐私保护</strong><br>当前版本仅在此服务内即时分析，不保存原稿，也不用于训练。</p></div>
+        <button class="primary" id="submitBtn" type="submit"><span>开始模拟审核</span><b>→</b></button>
+      </form>
+
+      <aside class="side card">
+        <span class="step">02</span><h2>你将获得</h2>
+        <ol class="benefits"><li><b>多平台投稿准备度</b><span>把合规预审与内容成熟度分开，不把“无违规”当“必通过”</span></li><li><b>真人推荐价值</b><span>判断作品是否有作者声音、场景进入感和可记忆的写作资产</span></li><li><b>风险原文定位</b><span>说明触发原因、严重程度及上下文</span></li><li><b>针对性修改建议</b><span>兼顾表达安全、文风和阅读体验</span></li><li><b>六层作品体检</b><span>区分合规、成熟度、表达同质化与真人推荐价值</span></li></ol>
+        <div class="boundary"><strong>重要说明</strong><p>本工具提供模拟预审，不代表任何平台官方审核，不承诺保证过审。</p></div>
+      </aside>
+    </section>
+
+    <section id="results" class="results hidden">
+      <div class="result-title"><div><span class="eyebrow">模拟审核报告</span><h2 id="reportTitle">检测结果</h2></div><button id="backBtn" class="ghost">← 修改原文</button></div>
+      <div id="summaryCards" class="summary-grid"></div>
+      <div id="recommendationSection" class="card report-block recommendation-block hidden"><div class="section-head"><div><h3>真人阅读推荐审查</h3><p>在内容审核通过后，检查作品是否值得真人继续花时间阅读。</p></div><span id="recommendationRank" class="tag"></span></div><div class="recommendation-overview"><div><small>当前推荐状态</small><strong id="recommendationStatus"></strong><p id="recommendationAdvice"></p></div><div class="recommendation-meta"><span id="recommendationConfidence"></span><span id="methodCoverage"></span></div></div><div class="recommendation-grid"><section><h4>值得推荐的写作资产</h4><div id="recommendationStrengths"></div></section><section><h4>真人阅读风险</h4><div id="recommendationFindings"></div></section></div><div class="recommendation-grid compact"><section><h4>记忆资产</h4><div id="memoryAssets"></div></section><section><h4>悬念线状态</h4><div id="suspenseLines"></div></section></div><div><h4>章节情绪曲线</h4><div id="moodCurve" class="mood-curve"></div></div><div><h4>潜在跳读章节</h4><div id="dropoffList" class="dropoff-list"></div></div><p id="recommendationLimits" class="ai-limits"></p></div>
+      <div id="humanReviewSection" class="card report-block human-review-block hidden"><div class="section-head"><div><h3>AI模拟真人审稿会</h3><p id="reviewStatus">三名审核角色独立判断，再进行争议汇总。</p></div><span id="reviewModeTag" class="tag">多角色审稿</span></div><div id="adjudication" class="adjudication"></div><div id="reviewerCards" class="reviewer-grid"></div></div>
+      <div class="result-grid"><div class="card report-block"><div class="section-head"><div><h3>平台投稿准备度对比</h3><p>综合合规风险、样稿成熟度与平台画像；不是官方审核通过率。</p></div><span class="tag">冷启动估计</span></div><div id="platformResults"></div></div><div class="card report-block"><h3>五维健康度</h3><div id="categoryScores"></div></div></div>
+      <div id="aiStyleSection" class="card report-block ai-style-block hidden"><div class="section-head"><div><h3>AI辅助创作风险分析</h3><p>基于可解释的语言与结构特征，不把风格相似度当作作者身份鉴定。</p></div><span id="aiConfidence" class="tag"></span></div><div class="ai-overview"><div class="ai-gauge"><strong id="aiScore">0</strong><small>/100 风格风险分</small></div><div><b id="aiBand"></b><p id="aiRecommendation"></p></div></div><div id="aiSignals" class="ai-signals"></div><div id="aiAdvice" class="ai-advice"></div><div><h4>分段风险波动</h4><div id="aiSegments" class="ai-segments"></div></div><p id="aiLimits" class="ai-limits"></p></div>
+      <div id="chapterSection" class="card report-block chapter-block hidden"><div class="section-head"><div><h3>长篇章节风险地图</h3><p id="chapterSummary"></p></div><select id="chapterFilter"><option value="all">全部章节</option><option value="risk">只看有风险</option><option value="high">只看高风险</option></select></div><div id="chapterHotspots" class="chapter-hotspots"></div><div id="chapterList" class="chapter-list"></div></div>
+      <div class="card report-block"><div class="section-head"><h3>风险与优化建议</h3><select id="riskFilter"><option value="all">全部风险</option><option value="critical">致命风险</option><option value="high">高风险</option><option value="medium">中风险</option><option value="low">低风险</option></select></div><div id="issueList"></div></div>
+      <div class="card report-block sources-block"><div class="section-head"><div><h3>检测依据与资料来源</h3><p>优先采用法规及官方公开页面；平台内部词库、模型和人工尺度未公开。</p></div><span class="tag">可追溯</span></div><div id="sourceList" class="source-list"></div></div>
+      <p id="disclaimer" class="disclaimer"></p>
+    </section>
+  </main>
+  <footer>文审罗盘 MVP · 让每一次投稿都有依据</footer>
+  <script src="/app.js"></script>
+</body>
+</html>
